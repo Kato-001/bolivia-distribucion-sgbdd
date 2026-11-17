@@ -39,8 +39,8 @@ Si los dos comandos muestran una versión, Docker está listo.
 2. En PowerShell, ve a la carpeta donde quieras guardar el proyecto (por ejemplo, el Escritorio) y clónalo:
    ```powershell
    cd $HOME\Desktop
-   git clone <URL-DEL-REPOSITORIO>
-   cd <nombre-de-la-carpeta>
+   git clone https://github.com/Kato-001/bolivia-distribucion-sgbdd.git
+   cd bolivia-distribucion-sgbdd
    ```
 
 ## Paso 4 — Permitir los scripts de PowerShell (solo una vez)

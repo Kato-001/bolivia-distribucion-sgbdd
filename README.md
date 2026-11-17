@@ -24,8 +24,8 @@ Usuario: `postgres` · Contraseña: `bolivia123` · Base de datos: `bolivia`
 
 **Inicio rápido** (si ya tienes Docker Desktop abierto):
 ```powershell
-git clone <URL-DEL-REPOSITORIO>
-cd <carpeta>
+git clone https://github.com/Kato-001/bolivia-distribucion-sgbdd.git
+cd bolivia-distribucion-sgbdd
 .\demo.ps1 iniciar
 ```
 
