@@ -1,0 +1,194 @@
+# =====================================================================
+#  BoliviaDistribucion S.A. - Sistema de Base de Datos Distribuida
+#  6 nodos PostgreSQL 16 (uno por region) + configurador + coordinador 2PC
+#
+#  Encender todo:   docker compose up -d
+#  Ver estado:      docker compose ps
+#  Apagar:          docker compose down        (conserva los datos)
+#  Borrar todo:     docker compose down -v     (borra datos y vuelve a empezar)
+# =====================================================================
+name: boliviadistribucion
+
+# ---------- Configuracion comun a los 6 nodos ----------
+x-nodo-base: &nodo-base
+  image: postgres:16
+  restart: unless-stopped
+  networks: [bolivia_red]
+  command:
+    - postgres
+    - -c
+    - wal_level=logical                      # necesario para replicar el catalogo
+    - -c
+    - max_prepared_transactions=50           # necesario para 2PC (PREPARE TRANSACTION)
+    - -c
+    - max_replication_slots=20
+    - -c
+    - max_wal_senders=20
+    - -c
+    - tcp_keepalives_idle=10                 # detectar rapido conexiones caidas
+    - -c
+    - tcp_keepalives_interval=5
+    - -c
+    - tcp_keepalives_count=3
+    - -c
+    - idle_in_transaction_session_timeout=300000   # 5 min: libera bloqueos huerfanos
+  volumes:
+    - ./scripts:/scripts:ro
+    - ./scripts/00_init_nodo.sh:/docker-entrypoint-initdb.d/00_init_nodo.sh:ro
+  healthcheck:
+    test: ["CMD-SHELL", "pg_isready -h localhost -U postgres -d bolivia"]
+    interval: 5s
+    timeout: 3s
+    retries: 40
+
+x-env-base: &env-base
+  POSTGRES_USER: postgres
+  POSTGRES_PASSWORD: bolivia123
+  POSTGRES_DB: bolivia
+  TZ: America/La_Paz
+
+services:
+  nodo1_lapaz:
+    <<: *nodo-base
+    container_name: nodo1_lapaz
+    hostname: nodo1_lapaz
+    ports: ["5431:5432"]
+    environment:
+      <<: *env-base
+      NODO_ID: "1"
+      NODO_NOMBRE: "La Paz - Central Administrativo"
+      NODO_DEPTOS: "LP"
+      NODO_VENTAS: "11000"
+    volumes:
+      - ./scripts:/scripts:ro
+      - ./scripts/00_init_nodo.sh:/docker-entrypoint-initdb.d/00_init_nodo.sh:ro
+      - datos_nodo1:/var/lib/postgresql/data
+
+  nodo2_santacruz:
+    <<: *nodo-base
+    container_name: nodo2_santacruz
+    hostname: nodo2_santacruz
+    ports: ["5432:5432"]
+    environment:
+      <<: *env-base
+      NODO_ID: "2"
+      NODO_NOMBRE: "Santa Cruz - Agroindustria y Retail"
+      NODO_DEPTOS: "SC"
+      NODO_VENTAS: "15000"
+    volumes:
+      - ./scripts:/scripts:ro
+      - ./scripts/00_init_nodo.sh:/docker-entrypoint-initdb.d/00_init_nodo.sh:ro
+      - datos_nodo2:/var/lib/postgresql/data
+
+  nodo3_cochabamba:
+    <<: *nodo-base
+    container_name: nodo3_cochabamba
+    hostname: nodo3_cochabamba
+    ports: ["5433:5432"]
+    environment:
+      <<: *env-base
+      NODO_ID: "3"
+      NODO_NOMBRE: "Cochabamba - Hub de Distribucion"
+      NODO_DEPTOS: "CB"
+      NODO_VENTAS: "10000"
+    volumes:
+      - ./scripts:/scripts:ro
+      - ./scripts/00_init_nodo.sh:/docker-entrypoint-initdb.d/00_init_nodo.sh:ro
+      - datos_nodo3:/var/lib/postgresql/data
+
+  nodo4_tarija:
+    <<: *nodo-base
+    container_name: nodo4_tarija
+    hostname: nodo4_tarija
+    ports: ["5434:5432"]
+    environment:
+      <<: *env-base
+      NODO_ID: "4"
+      NODO_NOMBRE: "Tarija - Sub-nodo Sur (Tarija y Chuquisaca)"
+      NODO_DEPTOS: "TJ,CH"
+      NODO_VENTAS: "6000"
+    volumes:
+      - ./scripts:/scripts:ro
+      - ./scripts/00_init_nodo.sh:/docker-entrypoint-initdb.d/00_init_nodo.sh:ro
+      - datos_nodo4:/var/lib/postgresql/data
+
+  nodo5_oruro:
+    <<: *nodo-base
+    container_name: nodo5_oruro
+    hostname: nodo5_oruro
+    ports: ["5435:5432"]
+    environment:
+      <<: *env-base
+      NODO_ID: "5"
+      NODO_NOMBRE: "Oruro - Sub-nodo Occidente/Mineria (Oruro y Potosi)"
+      NODO_DEPTOS: "OR,PO"
+      NODO_VENTAS: "5000"
+    volumes:
+      - ./scripts:/scripts:ro
+      - ./scripts/00_init_nodo.sh:/docker-entrypoint-initdb.d/00_init_nodo.sh:ro
+      - datos_nodo5:/var/lib/postgresql/data
+
+  nodo6_beni:
+    <<: *nodo-base
+    container_name: nodo6_beni
+    hostname: nodo6_beni
+    ports: ["5436:5432"]
+    environment:
+      <<: *env-base
+      NODO_ID: "6"
+      NODO_NOMBRE: "Beni - Sub-nodo Oriente/Amazonia (Beni y Pando)"
+      NODO_DEPTOS: "BE,PA"
+      NODO_VENTAS: "3000"
+    volumes:
+      - ./scripts:/scripts:ro
+      - ./scripts/00_init_nodo.sh:/docker-entrypoint-initdb.d/00_init_nodo.sh:ro
+      - datos_nodo6:/var/lib/postgresql/data
+
+  # ---------- Se ejecuta UNA vez cuando los 6 nodos estan listos ----------
+  # Crea las suscripciones de replicacion, carga los 50.000 registros de
+  # ventas, conecta La Paz con los demas nodos (postgres_fdw) y crea las vistas.
+  configurador:
+    image: postgres:16
+    container_name: configurador
+    networks: [bolivia_red]
+    restart: "no"
+    environment:
+      PGUSER: postgres
+      PGPASSWORD: bolivia123
+      PGDATABASE: bolivia
+    volumes:
+      - ./scripts:/scripts:ro
+    entrypoint: ["bash", "/scripts/configurar.sh"]
+    depends_on:
+      nodo1_lapaz:      { condition: service_healthy }
+      nodo2_santacruz:  { condition: service_healthy }
+      nodo3_cochabamba: { condition: service_healthy }
+      nodo4_tarija:     { condition: service_healthy }
+      nodo5_oruro:      { condition: service_healthy }
+      nodo6_beni:       { condition: service_healthy }
+
+  # ---------- Coordinador de transacciones distribuidas (2PC) ----------
+  # No se enciende con "up"; se usa bajo demanda:
+  #   docker compose run --rm coordinador traspaso --origen SC --destino BE --producto 10 --cantidad 5
+  coordinador:
+    build: ./coordinador
+    image: boliviadistribucion-coordinador
+    profiles: ["herramientas"]
+    networks: [bolivia_red]
+    environment:
+      PGPASSWORD: bolivia123
+      PYTHONIOENCODING: utf-8
+    volumes:
+      - ./coordinador:/app
+
+networks:
+  bolivia_red:
+    name: bolivia_red
+
+volumes:
+  datos_nodo1:
+  datos_nodo2:
+  datos_nodo3:
+  datos_nodo4:
+  datos_nodo5:
+  datos_nodo6:

@@ -1,0 +1,5 @@
+# Los scripts que se ejecutan dentro de los contenedores Linux deben tener fin de linea LF
+*.sh   text eol=lf
+*.sql  text eol=lf
+*.py   text eol=lf
+Dockerfile text eol=lf
