@@ -59,6 +59,7 @@ switch ($Comando.ToLower()) {
 
     "iniciar" {
         Write-Titulo "Encendiendo los 6 nodos (la primera vez tarda unos minutos)"
+        docker rm -f configurador *> $null    # borra el registro de ejecuciones anteriores
         docker compose up -d
         Write-Titulo "Esperando al configurador (replicacion, datos, vistas)..."
         docker wait configurador | Out-Null
